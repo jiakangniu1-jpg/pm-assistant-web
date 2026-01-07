@@ -4,7 +4,7 @@
 
     <textarea
       v-model="message"
-      placeholder="请输入你想问 PM 助手的问题"
+      placeholder="请输入你想问 PM 助手的问题-哈哈哈哈哈"
       rows="6"
     />
 
