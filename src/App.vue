@@ -2,7 +2,7 @@
   <div class="page">
     <div class="hero">
       <div class="hero-text">
-        <p class="eyebrow">AI 产品助手 · GPT 风格</p>
+        <p class="eyebrow">AI 产品助手</p>
         <h1>用对话快速收敛 PRD</h1>
         <p class="sub">
           先用表单提交关键需求，再通过对话补充细节，信息充分后生成 PRD。
