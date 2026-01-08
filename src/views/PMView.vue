@@ -56,6 +56,37 @@
 
     <div class="layout">
       <div class="left-col">
+        <div class="card session-card">
+          <div class="card-header">
+            <div>
+              <div class="title">历史会话</div>
+              <div class="caption">点击进入历史对话，自动保存</div>
+            </div>
+            <button class="ghost compact" type="button" @click="newChat" :disabled="loading">新会话</button>
+          </div>
+
+          <div class="session-list" :class="{ empty: !sessionsSorted.length }">
+            <div v-if="!sessionsSorted.length" class="placeholder">暂无会话，点击“新会话”开始</div>
+            <div
+              v-else
+              v-for="s in sessionsSorted"
+              :key="s.id"
+              class="session-item"
+              :class="{ active: s.id === activeSessionId }"
+              @click="openSession(s.id)"
+            >
+              <div class="session-main">
+                <div class="session-name">{{ s.name }}</div>
+                <div class="session-time">{{ formatTime(s.updatedAt) }}</div>
+              </div>
+              <div class="session-actions" @click.stop>
+                <button class="icon-btn" type="button" @click="renameSession(s.id)">重命名</button>
+                <button class="icon-btn danger" type="button" @click="deleteSession(s.id)">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card form-card">
           <div class="card-header">
             <div>
@@ -109,10 +140,15 @@
               <div class="title">对话</div>
               <div class="caption">提交表单后可继续追问补充</div>
             </div>
-            <div class="status" v-if="loading">
-              <span class="dot"></span> 正在思考...
+            <div class="chat-controls">
+              <div class="status" v-if="loading">
+                <span class="dot"></span> 正在思考...
+              </div>
+              <div v-else class="hint">当前会话：{{ activeSessionName }}</div>
             </div>
+
           </div>
+
 
           <div class="messages" :class="{ empty: !messages.length }">
             <div v-if="!messages.length" class="placeholder">
@@ -172,6 +208,14 @@
 </template>
 
 <script>
+const PM_SESSIONS_KEY = 'pm-sessions';
+const PM_ACTIVE_ID_KEY = 'pm-active-session-id';
+const PM_LEGACY_KEY = 'pm-session';
+
+function uid() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default {
   name: 'PMView',
   data() {
@@ -183,6 +227,10 @@ export default {
       prdContent: '',
       userIdentity: '',
       selectedTemplateId: 'std',
+
+      sessions: [],
+      activeSessionId: '',
+
       templates: [
         {
           id: 'std',
@@ -265,14 +313,191 @@ export default {
       }
       return null;
     },
-
+    sessionsSorted() {
+      return [...this.sessions].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    },
+    activeSessionName() {
+      const cur = this.sessions.find((s) => s.id === this.activeSessionId);
+      return (cur && cur.name) || '未命名';
+    },
+  },
+  created() {
+    this.initSessions();
   },
   methods: {
+
+
     buildPayload(messages) {
       const system = this.systemMessage;
       return system ? [system, ...messages] : messages;
     },
+    formatTime(ts) {
+      if (!ts) return '';
+      try {
+        return new Date(ts).toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      } catch (e) {
+        return '';
+      }
+    },
+    defaultSnapshot() {
+      return {
+        messages: [],
+        prdContent: '',
+        form: {
+          title: '',
+          goal: '',
+          users: '',
+          scenario: '',
+          features: '',
+          outOfScope: '',
+          timeline: '',
+          risks: '',
+        },
+        selectedTemplateId: 'std',
+        userIdentity: '',
+      };
+    },
+    initSessions() {
+      if (typeof window === 'undefined') return;
+
+      let sessions = [];
+      try {
+        sessions = JSON.parse(localStorage.getItem(PM_SESSIONS_KEY) || '[]') || [];
+      } catch (e) {
+        sessions = [];
+      }
+
+      // 旧数据迁移：把单会话快照转成会话列表
+      if (!sessions.length) {
+        const legacy = localStorage.getItem(PM_LEGACY_KEY);
+        if (legacy) {
+          try {
+            const parsed = JSON.parse(legacy);
+            sessions = [
+              {
+                id: uid(),
+                name: '迁移的会话',
+                updatedAt: Date.now(),
+                snapshot: {
+                  ...this.defaultSnapshot(),
+                  ...parsed,
+                  form: { ...this.defaultSnapshot().form, ...(parsed.form || {}) },
+                },
+              },
+            ];
+            localStorage.removeItem(PM_LEGACY_KEY);
+          } catch (e) {
+            sessions = [];
+          }
+        }
+      }
+
+      if (!sessions.length) {
+        sessions = [
+          {
+            id: uid(),
+            name: '新会话',
+            updatedAt: Date.now(),
+            snapshot: this.defaultSnapshot(),
+          },
+        ];
+      }
+
+      let activeId = localStorage.getItem(PM_ACTIVE_ID_KEY) || '';
+      if (!activeId || !sessions.some((s) => s.id === activeId)) {
+        activeId = sessions[0].id;
+      }
+
+      this.sessions = sessions;
+      this.activeSessionId = activeId;
+      localStorage.setItem(PM_ACTIVE_ID_KEY, activeId);
+      this.applySnapshot(this.getActiveSession()?.snapshot || this.defaultSnapshot());
+      this.saveSessions();
+    },
+    saveSessions() {
+      if (typeof window === 'undefined') return;
+      localStorage.setItem(PM_SESSIONS_KEY, JSON.stringify(this.sessions));
+      if (this.activeSessionId) localStorage.setItem(PM_ACTIVE_ID_KEY, this.activeSessionId);
+    },
+    getActiveSession() {
+      return this.sessions.find((s) => s.id === this.activeSessionId) || null;
+    },
+    applySnapshot(snapshot) {
+      const s = snapshot || this.defaultSnapshot();
+      this.messages = s.messages || [];
+      this.prdContent = s.prdContent || '';
+      this.form = { ...this.defaultSnapshot().form, ...(s.form || {}) };
+      this.selectedTemplateId = s.selectedTemplateId || 'std';
+      this.userIdentity = s.userIdentity || '';
+      this.input = '';
+      this.loading = false;
+      this.error = '';
+    },
+    makeSnapshot() {
+      return {
+        messages: this.messages,
+        prdContent: this.prdContent,
+        form: this.form,
+        selectedTemplateId: this.selectedTemplateId,
+        userIdentity: this.userIdentity,
+      };
+    },
+    persistActiveSession() {
+      const cur = this.getActiveSession();
+      if (!cur) return;
+      cur.snapshot = this.makeSnapshot();
+      cur.updatedAt = Date.now();
+      this.saveSessions();
+    },
+    ensureActiveSession() {
+      if (this.activeSessionId && this.getActiveSession()) return;
+      this.newChat();
+    },
+    openSession(id) {
+      if (this.loading) return;
+      if (id === this.activeSessionId) return;
+      this.persistActiveSession();
+      this.activeSessionId = id;
+      localStorage.setItem(PM_ACTIVE_ID_KEY, id);
+      const target = this.sessions.find((s) => s.id === id);
+      this.applySnapshot((target && target.snapshot) || this.defaultSnapshot());
+      this.saveSessions();
+    },
+    renameSession(id) {
+      const s = this.sessions.find((x) => x.id === id);
+      if (!s) return;
+      const name = window.prompt('请输入会话名称', s.name || '');
+      if (!name) return;
+      s.name = name.trim().slice(0, 30) || s.name;
+      s.updatedAt = Date.now();
+      this.saveSessions();
+    },
+    deleteSession(id) {
+      if (this.loading) return;
+      const idx = this.sessions.findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      const removed = this.sessions.splice(idx, 1)[0];
+      if (removed && removed.id === this.activeSessionId) {
+        const next = this.sessions[0];
+        if (next) {
+          this.activeSessionId = next.id;
+          this.applySnapshot(next.snapshot || this.defaultSnapshot());
+        } else {
+          // 如果删光了，就新建一个空会话
+          this.newChat();
+        }
+      }
+      this.saveSessions();
+    },
+
     insertQuick(text) {
+
       this.input = this.input ? `${this.input} ${text}` : text;
     },
     resetForm() {
@@ -289,11 +514,22 @@ export default {
     },
     newChat() {
       if (this.loading) return;
-      this.input = '';
-      this.messages = [];
-      this.prdContent = '';
-      this.error = '';
+      this.persistActiveSession();
+
+      const id = uid();
+      const session = {
+        id,
+        name: `会话 ${new Date().toLocaleString('zh-CN')}`,
+        updatedAt: Date.now(),
+        snapshot: this.defaultSnapshot(),
+      };
+      this.sessions.unshift(session);
+      this.activeSessionId = id;
+      this.applySnapshot(session.snapshot);
+      this.saveSessions();
     },
+
+
     async submitForm() {
       if (this.loading) return;
       const parts = [
@@ -322,6 +558,8 @@ export default {
       await this.sendMessage(content);
     },
     async sendMessage(content) {
+      this.ensureActiveSession();
+
       const userMessage = {
         role: 'user',
         content,
@@ -353,6 +591,7 @@ export default {
           const text = await res.text();
           this.loading = false;
           aiMessage.content = `接口错误 ${res.status}: ${text || '无返回体'}`;
+          this.persistActiveSession();
           return;
         }
 
@@ -363,6 +602,7 @@ export default {
           const text = await res.text();
           this.loading = false;
           aiMessage.content = text || '接口返回空内容，请检查云函数日志';
+          this.persistActiveSession();
           return;
         }
 
@@ -389,6 +629,7 @@ export default {
 
             if (data === '[DONE]') {
               this.loading = false;
+              this.persistActiveSession();
               return;
             }
 
@@ -397,13 +638,19 @@ export default {
         }
 
         this.loading = false;
+        this.persistActiveSession();
       } catch (err) {
         this.loading = false;
         aiMessage.content = `请求异常: ${err.message}`;
+        this.persistActiveSession();
       }
     },
+
+
     async generatePrd() {
+      this.ensureActiveSession();
       if (!this.messages.length || this.loading) return;
+
       this.loading = true;
       this.error = '';
       this.prdContent = '';
@@ -426,6 +673,7 @@ export default {
           this.loading = false;
           this.prdContent = `接口错误 ${res.status}: ${text || '无返回体'}`;
           this.messages.push({ role: 'assistant', content: this.prdContent });
+          this.persistActiveSession();
           return;
         }
 
@@ -437,6 +685,7 @@ export default {
           this.loading = false;
           this.prdContent = text || '接口返回空内容，请检查云函数日志';
           this.messages.push({ role: 'assistant', content: this.prdContent });
+          this.persistActiveSession();
           return;
         }
 
@@ -460,6 +709,7 @@ export default {
             if (data === '[DONE]') {
               this.loading = false;
               this.messages.push({ role: 'assistant', content: draft || '(空 PRD 返回)' });
+              this.persistActiveSession();
               return;
             }
             draft += data;
@@ -470,11 +720,15 @@ export default {
         this.loading = false;
         this.prdContent = draft;
         this.messages.push({ role: 'assistant', content: draft || '(空 PRD 返回)' });
+        this.persistActiveSession();
       } catch (err) {
         this.loading = false;
         this.prdContent = `请求异常: ${err.message}`;
+        this.persistActiveSession();
       }
     },
+
+
     async copyPrd() {
       if (!this.prdContent) return;
       try {

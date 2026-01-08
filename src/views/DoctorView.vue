@@ -56,8 +56,19 @@
               <div class="title">对话</div>
               <div class="caption">补充信息或追问</div>
             </div>
-            <div class="status" v-if="loading">
-              <span class="dot"></span> 正在回复...
+            <div class="chat-controls">
+              <div class="status" v-if="loading">
+                <span class="dot"></span> 正在回复...
+              </div>
+              <button
+                v-else-if="canRestoreSession"
+                class="ghost compact"
+                type="button"
+                @click="restoreSession"
+                :disabled="loading"
+              >
+                恢复上次会话
+              </button>
             </div>
           </div>
 
@@ -112,6 +123,8 @@
 </template>
 
 <script>
+const DOCTOR_SESSION_KEY = 'doctor-session';
+
 const SYSTEM_PROMPT = {
   role: 'system',
   content:
@@ -132,11 +145,68 @@ export default {
       loading: false,
       error: '',
       summary: '',
+      hasSavedSession: false,
     };
+  },
+  computed: {
+    canRestoreSession() {
+      return this.hasSavedSession && !this.messages.length && !this.loading;
+    },
+  },
+  created() {
+    this.checkSavedSession();
   },
   methods: {
     buildPayload(messages) {
       return [SYSTEM_PROMPT, ...messages];
+    },
+    checkSavedSession() {
+      if (typeof window === 'undefined') return;
+      this.hasSavedSession = !!localStorage.getItem(DOCTOR_SESSION_KEY);
+    },
+    persistSession() {
+      if (typeof window === 'undefined') return;
+      try {
+        const snapshot = {
+          symptom: this.symptom,
+          duration: this.duration,
+          medications: this.medications,
+          history: this.history,
+          notes: this.notes,
+          input: this.input,
+          messages: this.messages,
+          summary: this.summary,
+        };
+        localStorage.setItem(DOCTOR_SESSION_KEY, JSON.stringify(snapshot));
+        this.hasSavedSession = true;
+      } catch (err) {
+        console.warn('Failed to persist doctor session', err);
+      }
+    },
+    restoreSession() {
+      if (this.loading || typeof window === 'undefined') return;
+      const raw = localStorage.getItem(DOCTOR_SESSION_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        this.symptom = parsed.symptom || '';
+        this.duration = parsed.duration || '';
+        this.medications = parsed.medications || '';
+        this.history = parsed.history || '';
+        this.notes = parsed.notes || '';
+        this.input = parsed.input || '';
+        this.messages = parsed.messages || [];
+        this.summary = parsed.summary || '';
+        this.hasSavedSession = true;
+      } catch (err) {
+        console.warn('Failed to restore doctor session', err);
+        this.clearSessionSnapshot();
+      }
+    },
+    clearSessionSnapshot() {
+      if (typeof window === 'undefined') return;
+      localStorage.removeItem(DOCTOR_SESSION_KEY);
+      this.hasSavedSession = false;
     },
     resetForm() {
       this.symptom = '';
@@ -148,6 +218,7 @@ export default {
       this.messages = [];
       this.summary = '';
       this.error = '';
+      this.clearSessionSnapshot();
     },
     async submitForm() {
       if (this.loading) return;
@@ -194,6 +265,7 @@ export default {
           const text = await res.text();
           this.loading = false;
           aiMessage.content = `接口错误 ${res.status}: ${text || '无返回体'}`;
+          this.persistSession();
           return;
         }
 
@@ -205,6 +277,7 @@ export default {
           this.loading = false;
           aiMessage.content = text || '接口返回空内容，请检查云函数日志';
           if (shouldSummarize) this.summary = aiMessage.content;
+          this.persistSession();
           return;
         }
 
@@ -226,6 +299,7 @@ export default {
             if (data === '[DONE]') {
               this.loading = false;
               if (shouldSummarize) this.summary = draft;
+              this.persistSession();
               return;
             }
             draft += data;
@@ -235,9 +309,11 @@ export default {
 
         this.loading = false;
         if (shouldSummarize) this.summary = draft;
+        this.persistSession();
       } catch (err) {
         this.loading = false;
         aiMessage.content = `请求异常: ${err.message}`;
+        this.persistSession();
       }
     },
     async copySummary() {

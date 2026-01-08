@@ -1,5 +1,6 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
+import HomeView from '../views/HomeView.vue'
 import PMView from '../views/PMView.vue'
 import ProgrammerView from '../views/ProgrammerView.vue'
 import DoctorView from '../views/DoctorView.vue'
@@ -9,7 +10,8 @@ Vue.use(VueRouter)
 const routes = [
   {
     path: '/',
-    redirect: '/pm'
+    name: 'home',
+    component: HomeView
   },
   {
     path: '/pm',
