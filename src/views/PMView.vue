@@ -146,11 +146,15 @@
           
           <!-- 快捷操作 -->
           <div class="quick-actions">
-            <button class="quick-action" @click="generatePrd" :disabled="loading || messages.length === 0">
+            <button class="quick-action" @click="generatePrd" :disabled="loading || messages.length === 0 || !canGeneratePrd">
               📄 生成 PRD
+              <span v-if="!canGeneratePrd && messages.length > 0" class="quick-action-hint">（继续对话以完善需求）</span>
             </button>
             <button class="quick-action" @click="exportData" :disabled="messages.length === 0">
               💾 导出对话
+            </button>
+            <button class="quick-action quick-action-debug" @click="testQuestionModal" v-if="false">
+              🔧 测试弹窗
             </button>
           </div>
         </div>
@@ -167,6 +171,41 @@
         </div>
         <div class="prd-content">
           <pre>{{ prdContent }}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 问题弹窗 -->
+    <div class="modal-overlay" v-if="showQuestionsModal" @click="closeQuestionsModal">
+      <div class="modal-container" @click.stop>
+        <div class="modal-header">
+          <h3 class="modal-title">💡 帮我了解更多信息</h3>
+          <button class="modal-close" @click="closeQuestionsModal">×</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="modal-desc">为了更好地帮助您，请回答以下问题：</div>
+          
+          <div class="questions-list">
+            <div v-for="question in questions" :key="question.id" class="question-item">
+              <label class="question-label">{{ question.question }}</label>
+              <textarea
+                v-model="questionAnswers[question.id]"
+                class="question-input"
+                rows="3"
+                :placeholder="'请详细描述...'"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="modal-btn modal-btn-secondary" @click="closeQuestionsModal">
+            跳过
+          </button>
+          <button class="modal-btn modal-btn-primary" @click="submitQuestionAnswers">
+            提交答案
+          </button>
         </div>
       </div>
     </div>
@@ -196,13 +235,11 @@ export default {
       sessions: [],
       activeSessionId: '',
       
-      suggestions: [
-        '目标用户是谁？',
-        '核心功能是什么？',
-        '遇到什么问题？',
-        '预期达到什么效果？',
-        '有什么限制条件？'
-      ]
+      suggestions: [],
+      showQuestionsModal: false,
+      questions: [],
+      questionAnswers: {},
+      canGeneratePrd: false
     };
   },
   computed: {
@@ -212,6 +249,14 @@ export default {
     },
     sessionsSorted() {
       return [...this.sessions].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    }
+  },
+  watch: {
+    messages: {
+      handler(newMessages) {
+        this.analyzeAIMessage(newMessages);
+      },
+      deep: true
     }
   },
   created() {
@@ -416,7 +461,27 @@ export default {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [
-              { role: 'system', content: '你是一位资深产品经理助手。你的任务是：1）理解用户的产品想法 2）主动追问关键信息（目标用户、核心价值、痛点等） 3）给出专业建议 4）当信息充分时提醒用户可以生成 PRD。回答要简洁、友好、结构化。' },
+              { role: 'system', content: `你是一位资深产品经理助手。你的任务是：
+1）理解用户的产品想法和需求
+2）主动追问关键信息（目标用户、核心价值、痛点、业务流程等）
+3）给出专业建议和方向指导
+4）当信息充分时提醒用户可以生成 PRD
+
+重要指令（必须严格遵守）：
+- 当你需要向用户提问以了解更多信息时，请按以下格式返回：[需要提问]{"questions":[{"id":"q1","question":"问题内容1"},{"id":"q2","question":"问题内容2"}]}
+- 必须使用英文半角双引号 " 而不是中文双引号 ""
+- 必须使用英文冒号 : 而不是中文冒号 ：
+- 必须使用英文逗号 , 而不是中文逗号 ，
+- 一次可以问 1-3 个相关问题，不要一次问太多
+- 当用户的信息已经比较完整时，在回答中说明 [可以生成PRD]，并鼓励用户点击生成按钮
+- 回答要简洁、友好、结构化
+
+示例：
+用户：我想做一个出入库管理系统
+AI：[需要提问]{"questions":[{"id":"q1","question":"请问您的出入库管理系统主要管理的是什么类型的商品或物料？"},{"id":"q2","question":"这个系统主要解决什么样的痛点？比如是库存混乱、找不到货、还是出入库效率低？"},{"id":"q3","question":"这个需求的背景是什么？比如是公司内部使用还是提供给客户使用？"}}
+
+用户回答问题后，如果信息充分：
+AI：好的，根据您的描述，我已经了解了基本需求。现在可以生成 PRD 了，点击"生成 PRD"按钮即可。[可以生成PRD]` },
               ...this.messages.slice(0, -1)
             ]
           })
@@ -493,7 +558,7 @@ export default {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [
-              { role: 'system', content: '你是一位资深产品经理，擅长撰写专业的 PRD 文档。' },
+              { role: 'system', content: '你是一位资深产品经理，擅长撰写专业的 PRD 文档。基于用户和你的对话内容，生成一份完整、专业、可直接用于评审的 PRD 文档。' },
               ...this.messages,
               { role: 'user', content: prompt }
             ]
@@ -593,6 +658,148 @@ export default {
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
+    },
+
+    analyzeAIMessage(messages) {
+      if (!messages.length) return;
+
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role !== 'assistant') return;
+
+      const content = lastMessage.content;
+      console.log('AI Response:', content); // 调试日志
+
+      // 检测是否包含问题标记
+      if (content.includes('[需要提问]') || content.includes('需要提问')) {
+        this.parseQuestions(content);
+      }
+
+      // 检测是否可以生成 PRD
+      if (content.includes('[可以生成PRD]') || content.includes('可以生成PRD') || content.includes('信息已经足够')) {
+        this.canGeneratePrd = true;
+      } else {
+        this.canGeneratePrd = false;
+      }
+    },
+
+    parseQuestions(content) {
+      try {
+        console.log('Attempting to parse questions from:', content); // 调试日志
+
+        // 尝试多种格式解析 - 使用非贪婪匹配但支持嵌套结构
+        // 修复：匹配 [需要提问] 后面完整的 JSON 对象
+        let jsonMatch = content.match(/\[需要提问\](\{[\s\S]*?\})/s);
+        if (!jsonMatch) {
+          jsonMatch = content.match(/\{[\s\S]*questions[\s\S]*\}/s);
+        }
+
+        if (jsonMatch) {
+          console.log('Found JSON match:', jsonMatch[1]); // 调试日志
+          console.log('JSON length:', jsonMatch[1].length); // 调试日志
+
+          // 预处理：将中文标点转换为英文标点
+          let jsonString = jsonMatch[1]
+            .replace(/：/g, ':')  // 中文冒号转英文冒号
+            .replace(/，/g, ',') // 中文逗号转英文逗号
+            .replace(/"/g, '"') // 中文双引号转英文双引号
+            .replace(/"/g, '"') // 另一种中文双引号
+            .replace(/'/g, "'")  // 中文单引号转英文单引号
+            .replace(/'/g, "'") // 另一种中文单引号
+            .replace(/[\u201C\u201D\u2018\u2019]/g, '"') // Unicode 引号
+            .trim();
+
+          console.log('Preprocessed JSON string:', jsonString); // 调试日志
+
+          // 尝试直接解析
+          try {
+            const data = JSON.parse(jsonString);
+            this.questions = data.questions || [];
+            this.questionAnswers = {};
+            console.log('Setting showQuestionsModal to true, questions:', this.questions); // 调试日志
+            this.showQuestionsModal = true;
+            return;
+          } catch (parseError) {
+            console.error('JSON parse failed:', parseError);
+            throw parseError;
+          }
+        } else {
+          console.log('No JSON match found'); // 调试日志
+        }
+      } catch (e) {
+        console.error('Failed to parse questions:', e); // 调试日志
+        console.error('Error position info:', {
+          message: e.message,
+          position: e.message.match(/position (\d+)/)?.[1]
+        });
+
+        // 降级策略：直接从完整内容中提取问题
+        console.log('Attempting fallback parsing...');
+        try {
+          const extractedQuestions = [];
+          const regex = /"question":\s*"([^"]*)"/g;
+          let match;
+          let id = 1;
+          while ((match = regex.exec(content)) !== null) {
+            extractedQuestions.push({
+              id: `q${id}`,
+              question: match[1]
+            });
+            id++;
+          }
+
+          if (extractedQuestions.length > 0) {
+            this.questions = extractedQuestions;
+            this.questionAnswers = {};
+            this.showQuestionsModal = true;
+            console.log('Fallback successful, extracted questions:', this.questions);
+            return;
+          } else {
+            console.log('Fallback also failed: no questions found');
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback parsing also failed:', fallbackErr);
+        }
+      }
+    },
+
+    submitQuestionAnswers() {
+      const answeredQuestions = Object.entries(this.questionAnswers)
+        .filter(([_, answer]) => answer && answer.trim())
+        .map(([questionId, answer]) => {
+          const question = this.questions.find(q => q.id === questionId);
+          return `${question.question}\n回答：${answer}`;
+        });
+
+      if (answeredQuestions.length === 0) {
+        alert('请至少回答一个问题');
+        return;
+      }
+
+      const answersText = answeredQuestions.join('\n\n');
+      this.input = answersText;
+      this.showQuestionsModal = false;
+      
+      this.$nextTick(() => {
+        this.sendMessage();
+      });
+    },
+
+    closeQuestionsModal() {
+      this.showQuestionsModal = false;
+      this.questions = [];
+      this.questionAnswers = {};
+    },
+
+    testQuestionModal() {
+      // 测试方法：手动触发弹窗
+      this.questions = [
+        { id: 'q1', question: '请问您的出入库管理系统主要管理的是什么类型的商品或物料？' },
+        { id: 'q2', question: '这个系统主要解决什么样的痛点？比如是库存混乱、找不到货、还是出入库效率低？' },
+        { id: 'q3', question: '这个需求的背景是什么？比如是公司内部使用还是提供给客户使用？' }
+      ];
+      this.questionAnswers = {};
+      this.showQuestionsModal = true;
+      console.log('测试弹窗已触发');
     }
   }
 };
@@ -1243,26 +1450,246 @@ export default {
   .welcome-section {
     padding: 40px 16px;
   }
-  
+
   .welcome-title {
     font-size: 28px;
   }
-  
+
   .welcome-desc {
     font-size: 16px;
   }
-  
+
   .quick-start-cards {
     grid-template-columns: 1fr;
   }
-  
+
   .chat-panel {
     max-height: calc(100vh - 40px);
     border-radius: 16px;
   }
-  
+
   .message-content {
     max-width: 85%;
+  }
+}
+
+/* 问题弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-container {
+  background: white;
+  border-radius: 24px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #6b7280;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.modal-body {
+  padding: 24px 28px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-desc {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.question-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+.question-input {
+  width: 100%;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+  min-height: 80px;
+}
+
+.question-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.question-input::placeholder {
+  color: #9ca3af;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 28px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 24px 24px;
+}
+
+.modal-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.modal-btn-secondary {
+  background: white;
+  color: #6b7280;
+  border: 2px solid #e5e7eb;
+}
+
+.modal-btn-secondary:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+  border-color: #d1d5db;
+}
+
+.modal-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.modal-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.quick-action-hint {
+  font-size: 12px;
+  font-weight: normal;
+  opacity: 0.8;
+  margin-left: 4px;
+}
+
+/* 弹窗响应式 */
+@media (max-width: 640px) {
+  .modal-container {
+    width: 95%;
+    max-height: 90vh;
+    border-radius: 20px;
+  }
+
+  .modal-header {
+    padding: 20px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .modal-body {
+    padding: 20px;
+  }
+
+  .modal-footer {
+    padding: 16px 20px;
+    border-radius: 0 0 20px 20px;
+  }
+
+  .modal-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+
+  .question-label {
+    font-size: 14px;
+  }
+
+  .question-input {
+    padding: 10px 14px;
+    font-size: 14px;
   }
 }
 </style>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试 AI 问题格式</title>
+  <style>
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      resize: vertical;
+      margin-bottom: 15px;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .response {
+      margin-top: 20px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .loading {
+      color: #666;
+      margin-top: 20px;
+    }
+    .error {
+      color: #d32f2f;
+      margin-top: 20px;
+    }
+    .parsed {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e8f5e9;
+      border-radius: 8px;
+      border-left: 4px solid #4caf50;
+    }
+    .parsed h3 {
+      margin-top: 0;
+      color: #2e7d32;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>测试 AI 问题格式</h1>
+    <p>输入用户消息，测试 AI 是否返回正确的问题格式</p>
+
+    <textarea id="userInput" placeholder="例如：我想做一个出入库管理系统">我想做一个出入库管理系统</textarea>
+
+    <button id="sendBtn" onclick="testAPI()">发送测试</button>
+
+    <div id="loading" class="loading" style="display: none;">正在发送请求...</div>
+    <div id="error" class="error" style="display: none;"></div>
+
+    <div id="response" class="response" style="display: none;"></div>
+    <div id="parsed" class="parsed" style="display: none;"></div>
+  </div>
+
+  <script>
+    async function testAPI() {
+      const userInput = document.getElementById('userInput').value.trim();
+      if (!userInput) {
+        alert('请输入测试内容');
+        return;
+      }
+
+      const sendBtn = document.getElementById('sendBtn');
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const response = document.getElementById('response');
+      const parsed = document.getElementById('parsed');
+
+      // 重置状态
+      sendBtn.disabled = true;
+      loading.style.display = 'block';
+      error.style.display = 'none';
+      response.style.display = 'none';
+      parsed.style.display = 'none';
+
+      const systemPrompt = `你是一位资深产品经理助手。你的任务是：
+1）理解用户的产品想法和需求
+2）主动追问关键信息（目标用户、核心价值、痛点、业务流程等）
+3）给出专业建议和方向指导
+4）当信息充分时提醒用户可以生成 PRD
+
+重要指令（必须严格遵守）：
+- 当你需要向用户提问以了解更多信息时，请按以下格式返回：
+[需要提问]{"questions":[{"id":"q1","question":"问题内容1"},{"id":"q2","question":"问题内容2"},{"id":"q3","question":"问题内容3"}]}
+- 必须使用英文半角双引号 " 而不是中文双引号 ""
+- 必须使用英文冒号 : 而不是中文冒号 ：
+- 必须使用英文逗号 , 而不是中文逗号 ，
+- 一次可以问 1-3 个相关问题，不要一次问太多
+- 当用户的信息已经比较完整时，在回答中加上 [可以生成PRD] 标记
+- 回答要简洁、友好、结构化
+
+示例1（需要提问）：
+用户：我想做一个出入库管理系统
+你：[需要提问]{"questions":[{"id":"q1","question":"请问您的出入库管理系统主要管理的是什么类型的商品或物料？"},{"id":"q2","question":"这个系统主要解决什么样的痛点？比如是库存混乱、找不到货、还是出入库效率低？"},{"id":"q3","question":"这个需求的背景是什么？比如是公司内部使用还是提供给客户使用？"}]}`;
+
+      try {
+        const res = await fetch('https://pm-assistant-api-5w1t.vercel.app/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userInput }
+            ]
+          })
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+
+        const isSse = res.headers.get('content-type')?.includes('text/event-stream');
+
+        let fullResponse = '';
+        if (isSse) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split('\n\n');
+            buffer = events.pop();
+
+            for (const event of events) {
+              const line = event.trim();
+              if (line.startsWith('data:')) {
+                const data = line.replace('data:', '').trim();
+                if (data !== '[DONE]') {
+                  fullResponse += data;
+                  response.textContent = fullResponse;
+                  response.style.display = 'block';
+                }
+              }
+            }
+          }
+        } else {
+          fullResponse = await res.text();
+        }
+
+        // 显示响应
+        response.textContent = fullResponse;
+        response.style.display = 'block';
+
+        // 尝试解析问题
+        parseQuestions(fullResponse);
+
+      } catch (err) {
+        error.textContent = '错误: ' + err.message;
+        error.style.display = 'block';
+      } finally {
+        sendBtn.disabled = false;
+        loading.style.display = 'none';
+      }
+    }
+
+    function parseQuestions(content) {
+      const parsed = document.getElementById('parsed');
+
+      console.log('AI Response:', content);
+
+      // 检测是否包含问题标记
+      if (content.includes('[需要提问]') || content.includes('需要提问')) {
+        console.log('找到问题标记，开始解析...');
+
+        // 尝试多种格式解析 - 使用非贪婪匹配但支持多行
+        // 修复：匹配 [需要提问] 后面完整的 JSON 对象
+        let jsonMatch = content.match(/\[需要提问\](\{[\s\S]*?\})/s);
+        if (!jsonMatch) {
+          jsonMatch = content.match(/\{[\s\S]*questions[\s\S]*\}/s);
+        }
+
+        if (jsonMatch) {
+          console.log('找到 JSON:', jsonMatch[1]);
+          console.log('JSON 长度:', jsonMatch[1].length);
+          console.log('JSON 前100字符:', jsonMatch[1].substring(0, 100));
+
+          try {
+            // 预处理：将中文标点转换为英文标点
+            let jsonString = jsonMatch[1]
+              .replace(/：/g, ':')  // 中文冒号转英文冒号
+              .replace(/，/g, ',') // 中文逗号转英文逗号
+              .replace(/"/g, '"') // 中文双引号转英文双引号
+              .replace(/"/g, '"') // 另一种中文双引号
+              .replace(/'/g, "'")  // 中文单引号转英文单引号
+              .replace(/'/g, "'") // 另一种中文单引号
+              .replace(/[\u201C\u201D\u2018\u2019]/g, '"') // Unicode 引号
+              .trim();
+
+            console.log('预处理后的 JSON:', jsonString);
+            console.log('预处理后 JSON 长度:', jsonString.length);
+
+            const data = JSON.parse(jsonString);
+            const questions = data.questions || [];
+
+            let html = '<h3>✅ 成功解析到问题</h3>';
+            questions.forEach((q, index) => {
+              html += `<p><strong>问题 ${index + 1}:</strong> ${q.question}</p>`;
+            });
+
+            parsed.innerHTML = html;
+            parsed.style.display = 'block';
+          } catch (e) {
+            console.error('JSON 解析失败:', e);
+            console.error('错误详情:', e.message);
+
+            // 显示详细错误信息
+            let html = '<h3>❌ JSON 解析失败</h3>';
+            html += `<p><strong>错误信息:</strong> ${e.message}</p>`;
+            html += '<p><strong>原始 JSON:</strong></p>';
+            html += `<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">${jsonMatch[1]}</pre>`;
+
+            // 尝试提取问题（降级策略）
+            const questionRegex = /"question":\s*"([^"]*)"/g;
+            const questions = [];
+            let match;
+            let id = 1;
+            while ((match = questionRegex.exec(content)) !== null) {
+              questions.push(match[1]);
+              id++;
+            }
+
+            if (questions.length > 0) {
+              html += '<p><strong>尝试提取的问题（降级策略）:</strong></p>';
+              questions.forEach((q, index) => {
+                html += `<p><strong>问题 ${index + 1}:</strong> ${q}</p>`;
+              });
+            }
+
+            parsed.innerHTML = html;
+            parsed.style.display = 'block';
+          }
+        } else {
+          console.log('未找到 JSON');
+          parsed.innerHTML = '<h3>❌ 未找到 JSON 格式的问题</h3>';
+          parsed.style.display = 'block';
+        }
+      } else {
+        console.log('未找到问题标记');
+        parsed.innerHTML = '<h3>ℹ️ AI 没有提出问题</h3><p>响应中不包含 [需要提问] 标记</p>';
+        parsed.style.display = 'block';
+      }
+
+      // 检测 PRD 标记
+      if (content.includes('[可以生成PRD]') || content.includes('可以生成PRD')) {
+        parsed.innerHTML += '<p style="color: #4caf50; margin-top: 10px;"><strong>✅ 可以生成 PRD</strong></p>';
+      }
+    }
+  </script>
+</body>
+</html>
