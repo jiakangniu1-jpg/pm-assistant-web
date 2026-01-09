@@ -1,35 +1,101 @@
 <template>
-  <div>
-    <header class="topbar">
-      <div class="brand">AI 助手集合</div>
-      <nav class="nav-links">
-        <router-link to="/" exact-active-class="active" exact>首页</router-link>
-        <router-link to="/pm" exact-active-class="active" exact>产品经理</router-link>
-        <router-link to="/dev" exact-active-class="active" exact>程序员</router-link>
-        <router-link to="/doctor" exact-active-class="active" exact>寻医问诊</router-link>
-      </nav>
+  <div class="app-container">
+    <header class="navbar">
+      <div class="navbar-container">
+        <!-- Logo 和品牌 -->
+        <div class="navbar-brand">
+          <div class="logo-icon">✨</div>
+          <router-link to="/" class="brand-link">
+            <span class="brand-text">AI 助手集合</span>
+          </router-link>
+        </div>
+
+        <!-- 导航链接 -->
+        <nav class="navbar-nav">
+          <router-link to="/" class="nav-item" exact-active-class="active">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">首页</span>
+          </router-link>
+          <router-link to="/pm" class="nav-item" exact-active-class="active">
+            <span class="nav-icon">📝</span>
+            <span class="nav-text">产品经理</span>
+          </router-link>
+          <router-link to="/dev" class="nav-item" exact-active-class="active">
+            <span class="nav-icon">🧑‍💻</span>
+            <span class="nav-text">程序员</span>
+          </router-link>
+          <router-link to="/doctor" class="nav-item" exact-active-class="active">
+            <span class="nav-icon">🩺</span>
+            <span class="nav-text">寻医问诊</span>
+          </router-link>
+        </nav>
+
+        <!-- 移动端菜单按钮 -->
+        <button class="menu-toggle" @click="toggleMenu" :class="{ open: menuOpen }">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+
+      <!-- 移动端菜单 -->
+      <div class="mobile-menu" :class="{ open: menuOpen }">
+        <router-link to="/" class="mobile-nav-item" @click="closeMenu">
+          <span class="mobile-nav-icon">🏠</span>
+          <span>首页</span>
+        </router-link>
+        <router-link to="/pm" class="mobile-nav-item" @click="closeMenu">
+          <span class="mobile-nav-icon">📝</span>
+          <span>产品经理</span>
+        </router-link>
+        <router-link to="/dev" class="mobile-nav-item" @click="closeMenu">
+          <span class="mobile-nav-icon">🧑‍💻</span>
+          <span>程序员</span>
+        </router-link>
+        <router-link to="/doctor" class="mobile-nav-item" @click="closeMenu">
+          <span class="mobile-nav-icon">🩺</span>
+          <span>寻医问诊</span>
+        </router-link>
+      </div>
     </header>
-    <router-view />
+
+    <main class="main-content">
+      <router-view />
+    </main>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'App'
-}
+  name: 'App',
+  data() {
+    return {
+      menuOpen: false
+    };
+  },
+  methods: {
+    toggleMenu() {
+      this.menuOpen = !this.menuOpen;
+    },
+    closeMenu() {
+      this.menuOpen = false;
+    }
+  }
+};
 </script>
 
 <style>
+/* 全局变量 */
 :root {
   --bg: #f7f8fa;
   --card: #ffffff;
   --border: #e5e7eb;
   --text: #1f2937;
   --muted: #6b7280;
-  --accent: #10a37f;
-  --user: #dfe6f5;
-  --assistant: #ecfdf4;
+  --primary: #667eea;
+  --primary-dark: #764ba2;
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --navbar-height: 72px;
 }
 
 * {
@@ -43,6 +109,230 @@ body {
   color: var(--text);
 }
 
+/* 应用容器 */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 导航栏 */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.navbar-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: var(--navbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+/* 品牌区域 */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  font-size: 32px;
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.1) rotate(5deg); }
+}
+
+.brand-link {
+  text-decoration: none;
+}
+
+.brand-text {
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.02em;
+}
+
+/* 导航菜单 */
+.navbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 15px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.nav-item > * {
+  position: relative;
+  z-index: 1;
+}
+
+.nav-icon {
+  font-size: 20px;
+  transition: transform 0.3s ease;
+}
+
+.nav-text {
+  font-weight: 600;
+}
+
+.nav-item:hover {
+  color: var(--primary);
+  background: rgba(102, 126, 234, 0.08);
+  transform: translateY(-2px);
+}
+
+.nav-item:hover .nav-icon {
+  transform: scale(1.2);
+}
+
+.nav-item.active {
+  color: white;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.nav-item.active::before {
+  opacity: 1;
+}
+
+.nav-item.active:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+/* 移动端菜单按钮 */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  z-index: 1001;
+}
+
+.menu-toggle span {
+  width: 28px;
+  height: 3px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-toggle.open span:nth-child(1) {
+  transform: rotate(45deg) translate(6px, 6px);
+}
+
+.menu-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.menu-toggle.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(7px, -7px);
+}
+
+/* 移动端菜单 */
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: var(--navbar-height);
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 999;
+}
+
+.mobile-menu.open {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.mobile-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  text-decoration: none;
+  color: var(--text);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-item:hover {
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.mobile-nav-item.router-link-active {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+}
+
+.mobile-nav-icon {
+  font-size: 24px;
+}
+
+/* 主内容区 */
+.main-content {
+  flex: 1;
+  margin-top: var(--navbar-height);
+  min-height: calc(100vh - var(--navbar-height));
+}
+
+/* 保留原有的全局样式 */
 .container {
   display: flex;
   height: 100vh;
@@ -60,7 +350,7 @@ body {
   gap: 8px;
 }
 
-.main-content {
+.main-content-legacy {
   flex: 1;
   overflow-y: auto;
   position: relative;
@@ -834,6 +1124,43 @@ h1 {
   }
   .nav-links {
     gap: 6px;
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .navbar-nav {
+    display: none;
+  }
+  
+  .menu-toggle {
+    display: flex;
+  }
+  
+  .mobile-menu {
+    display: block;
+  }
+  
+  .navbar-container {
+    padding: 0 20px;
+  }
+  
+  .brand-text {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar-container {
+    padding: 0 16px;
+  }
+  
+  .logo-icon {
+    font-size: 28px;
+  }
+  
+  .brand-text {
+    font-size: 16px;
   }
 }
 </style>
